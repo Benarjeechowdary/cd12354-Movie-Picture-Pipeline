@@ -21,7 +21,7 @@ jobs:
       - name: Setup NodeJS
         uses: actions/setup-node@v3
         with:
-          node-version: '18.14'
+          node-version: "18.14"
 
       - name: Restore cache
         uses: actions/cache@v3
@@ -51,7 +51,7 @@ jobs:
       - name: Setup NodeJS
         uses: actions/setup-node@v3
         with:
-          node-version: '18.14'
+          node-version: "18.14"
 
       - name: Restore cache
         uses: actions/cache@v3
@@ -82,7 +82,7 @@ jobs:
       - name: Setup NodeJS
         uses: actions/setup-node@v3
         with:
-          node-version: '18.14'
+          node-version: "18.14"
 
       - name: Restore cache
         uses: actions/cache@v3
@@ -94,6 +94,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Run tests
+        run: npm run test -- --watchAll=false
 
       - name: Build Docker image
         run: |

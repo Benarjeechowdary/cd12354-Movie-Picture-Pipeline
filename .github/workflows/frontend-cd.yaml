@@ -21,7 +21,7 @@ jobs:
       - name: Setup NodeJS
         uses: actions/setup-node@v3
         with:
-          node-version: '18.14'
+          node-version: "18.14"
 
       - name: Restore cache
         uses: actions/cache@v3
@@ -51,7 +51,7 @@ jobs:
       - name: Setup NodeJS
         uses: actions/setup-node@v3
         with:
-          node-version: '18.14'
+          node-version: "18.14"
 
       - name: Restore cache
         uses: actions/cache@v3
@@ -82,7 +82,7 @@ jobs:
       - name: Setup NodeJS
         uses: actions/setup-node@v3
         with:
-          node-version: '18.14'
+          node-version: "18.14"
 
       - name: Restore cache
         uses: actions/cache@v3
@@ -139,3 +139,50 @@ jobs:
           kustomize edit set image frontend=$REGISTRY/$REPOSITORY:$IMAGE_TAG
           kustomize build | kubectl apply -f -
         working-directory: starter/frontend/k8s
+
+      - name: Verify deployment and collect evidence
+        env:
+          REPOSITORY: ${{ secrets.ECR_REPO_FRONTEND }}
+          IMAGE_TAG: ${{ github.sha }}
+          AWS_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+        run: |
+          mkdir -p deployment-evidence
+
+          kubectl rollout status deployment/frontend --timeout=5m | tee deployment-evidence/rollout-status.txt
+
+          for attempt in {1..30}; do
+            LOAD_BALANCER_URL=$(kubectl get service frontend -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+            if [ -z "$LOAD_BALANCER_URL" ]; then
+              LOAD_BALANCER_URL=$(kubectl get service frontend -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+            fi
+            if [ -n "$LOAD_BALANCER_URL" ]; then
+              break
+            fi
+            sleep 10
+          done
+
+          if [ -z "$LOAD_BALANCER_URL" ]; then
+            echo "The frontend LoadBalancer did not receive an external address." >&2
+            kubectl get service frontend -o wide
+            exit 1
+          fi
+
+          echo "Frontend application URL: http://$LOAD_BALANCER_URL"
+          echo "Frontend application URL: http://$LOAD_BALANCER_URL" | tee deployment-evidence/frontend-url.txt
+          echo "## Frontend application" >> "$GITHUB_STEP_SUMMARY"
+          echo "[Open the deployed frontend](http://$LOAD_BALANCER_URL)" >> "$GITHUB_STEP_SUMMARY"
+
+          kubectl get all | tee deployment-evidence/kubectl-get-all.txt
+          kubectl describe deploy frontend | tee deployment-evidence/kubectl-describe-deploy-frontend.txt
+
+          aws ecr describe-images \
+            --repository-name "$REPOSITORY" \
+            --image-ids imageTag="$IMAGE_TAG" \
+            --region "$AWS_REGION" \
+            --output json | tee deployment-evidence/ecr-frontend-image.json
+
+      - name: Upload deployment evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-deployment-evidence
+          path: starter/frontend/deployment-evidence
